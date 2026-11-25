@@ -1,25 +1,56 @@
-# Local smoke test before pushing images:  docker compose up --build
-# Then open http://localhost:8080 and register a new user to test
 services:
-  devopsdb:
-    image: shaikmustafa/king:db
-    environment:
-      MYSQL_ROOT_PASSWORD: localrootpass
-      MYSQL_USER: vprofile
-      MYSQL_PASSWORD: localapppass
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
-      interval: 10s
-      retries: 12
-
-  app:
-    image: shaikmustafa/king:app
+  web:
+    build: .
+    image: appimage
+    container_name: app-cont
+    env_file:
+      - .env
     ports:
       - "1234:8080"
-    environment:
-      JDBC_URL: "jdbc:mysql://devopsdb:3306/accounts?useUnicode=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull&useSSL=false"
-      JDBC_USERNAME: vprofile
-      JDBC_PASSWORD: localapppass
+    networks:
+      - mynetworks
+    volumes:
+      - myappvolume:/hyma
     depends_on:
-      devopsdb:
-        condition: service_healthy
+      - db
+    restart: on-failure
+    deploy:
+      resources:
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+        limits:
+          cpus: "1"
+          memory: 512M
+
+  db:
+    build: ./Docker-db
+    image: dbimage
+    container_name: db-cont
+    env_file:
+      - .env
+    ports:
+      - "3306:3306"
+    networks:
+      mynetworks:
+        aliases:
+          - devopsdb
+    volumes:
+      - mydbvolume:/var/lib/mysql
+    restart: on-failure
+    deploy:
+      resources:
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+        limits:
+          cpus: "1"
+          memory: 512M
+
+volumes:
+  myappvolume:
+  mydbvolume:
+
+networks:
+  mynetworks:
+    driver: bridge

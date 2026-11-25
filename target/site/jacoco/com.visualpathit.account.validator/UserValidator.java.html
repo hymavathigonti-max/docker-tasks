@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UserValidator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Devops Webapp</a> &gt; <a href="index.source.html" class="el_package">com.visualpathit.account.validator</a> &gt; <span class="el_source">UserValidator.java</span></div><h1>UserValidator.java</h1><pre class="source lang-java linenums">package com.visualpathit.account.validator;
+
+import com.visualpathit.account.model.User;
+import com.visualpathit.account.service.UserService;
+
+import java.util.regex.Pattern;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+import org.springframework.validation.Errors;
+import org.springframework.validation.ValidationUtils;
+import org.springframework.validation.Validator;
+
+@Component
+<span class="nc" id="L15">public class UserValidator implements Validator {</span>
+
+    /** Letters, digits, dot, underscore, hyphen - safe in URLs and HTML. */
+<span class="nc" id="L18">    private static final Pattern USERNAME = Pattern.compile(&quot;^[A-Za-z0-9._-]+$&quot;);</span>
+<span class="nc" id="L19">    private static final Pattern EMAIL = Pattern.compile(&quot;^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$&quot;);</span>
+
+    @Autowired
+    private UserService userService;
+
+    @Override
+    public boolean supports(Class&lt;?&gt; aClass) {
+<span class="nc" id="L26">        return User.class.equals(aClass);</span>
+    }
+
+    @Override
+    public void validate(Object o, Errors errors) {
+<span class="nc" id="L31">        User user = (User) o;</span>
+
+<span class="nc bnc" id="L33" title="All 2 branches missed.">        String username = user.getUsername() == null ? &quot;&quot; : user.getUsername();</span>
+<span class="nc bnc" id="L34" title="All 2 branches missed.">        if (username.trim().isEmpty()) {</span>
+<span class="nc" id="L35">            errors.rejectValue(&quot;username&quot;, &quot;NotEmpty&quot;);</span>
+<span class="nc bnc" id="L36" title="All 4 branches missed.">        } else if (username.length() &lt; 6 || username.length() &gt; 32) {</span>
+<span class="nc" id="L37">            errors.rejectValue(&quot;username&quot;, &quot;Size.userForm.username&quot;);</span>
+<span class="nc bnc" id="L38" title="All 2 branches missed.">        } else if (!USERNAME.matcher(username).matches()) {</span>
+<span class="nc" id="L39">            errors.rejectValue(&quot;username&quot;, &quot;Pattern.userForm.username&quot;);</span>
+<span class="nc bnc" id="L40" title="All 2 branches missed.">        } else if (userService.findByUsername(username) != null) {</span>
+<span class="nc" id="L41">            errors.rejectValue(&quot;username&quot;, &quot;Duplicate.userForm.username&quot;);</span>
+        }
+
+<span class="nc" id="L44">        ValidationUtils.rejectIfEmptyOrWhitespace(errors, &quot;userEmail&quot;, &quot;NotEmpty&quot;);</span>
+<span class="nc" id="L45">        String email = user.getUserEmail();</span>
+<span class="nc bnc" id="L46" title="All 6 branches missed.">        if (email != null &amp;&amp; !email.trim().isEmpty() &amp;&amp; !EMAIL.matcher(email.trim()).matches()) {</span>
+<span class="nc" id="L47">            errors.rejectValue(&quot;userEmail&quot;, &quot;Email.userForm.userEmail&quot;);</span>
+        }
+
+<span class="nc bnc" id="L50" title="All 2 branches missed.">        String password = user.getPassword() == null ? &quot;&quot; : user.getPassword();</span>
+<span class="nc bnc" id="L51" title="All 2 branches missed.">        if (password.isEmpty()) {</span>
+<span class="nc" id="L52">            errors.rejectValue(&quot;password&quot;, &quot;NotEmpty&quot;);</span>
+<span class="nc bnc" id="L53" title="All 4 branches missed.">        } else if (password.length() &lt; 8 || password.length() &gt; 32) {</span>
+<span class="nc" id="L54">            errors.rejectValue(&quot;password&quot;, &quot;Size.userForm.password&quot;);</span>
+        }
+
+<span class="nc bnc" id="L57" title="All 2 branches missed.">        if (!password.equals(user.getPasswordConfirm())) {</span>
+<span class="nc" id="L58">            errors.rejectValue(&quot;passwordConfirm&quot;, &quot;Diff.userForm.passwordConfirm&quot;);</span>
+        }
+<span class="nc" id="L60">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

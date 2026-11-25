@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UserController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Devops Webapp</a> &gt; <a href="index.source.html" class="el_package">com.visualpathit.account.controller</a> &gt; <span class="el_source">UserController.java</span></div><h1>UserController.java</h1><pre class="source lang-java linenums">package com.visualpathit.account.controller;
+
+import com.visualpathit.account.model.User;
+import com.visualpathit.account.service.ProducerService;
+import com.visualpathit.account.service.SecurityService;
+import com.visualpathit.account.service.UserService;
+import com.visualpathit.account.utils.MemcachedUtils;
+import com.visualpathit.account.validator.UserValidator;
+
+import java.security.Principal;
+import java.util.List;
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.validation.BindingResult;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+
+/** {@author waheedk} */
+@Controller
+<span class="fc" id="L27">public class UserController {</span>
+
+    /** Username that may open the admin pages (users list, RabbitMQ, Elasticsearch). */
+    public static final String ADMIN_USERNAME = &quot;admin_vp&quot;;
+
+<span class="fc" id="L32">    private static final Logger LOG = LoggerFactory.getLogger(UserController.class);</span>
+
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private SecurityService securityService;
+
+    @Autowired
+    private UserValidator userValidator;
+
+    @Autowired
+    private ProducerService producerService;
+
+    /** {@inheritDoc} */
+    @RequestMapping(value = &quot;/registration&quot;, method = RequestMethod.GET)
+    public final String registration(final Model model) {
+<span class="fc" id="L49">        model.addAttribute(&quot;userForm&quot;, new User());</span>
+<span class="fc" id="L50">        return &quot;registration&quot;;</span>
+    }
+
+    /** {@inheritDoc} */
+    @RequestMapping(value = &quot;/registration&quot;, method = RequestMethod.POST)
+    public final String registration(final @ModelAttribute(&quot;userForm&quot;) User userForm,
+                                     final BindingResult bindingResult, final Model model) {
+<span class="nc" id="L57">        userValidator.validate(userForm, bindingResult);</span>
+<span class="nc bnc" id="L58" title="All 2 branches missed.">        if (bindingResult.hasErrors()) {</span>
+<span class="nc" id="L59">            return &quot;registration&quot;;</span>
+        }
+<span class="nc" id="L61">        userService.save(userForm);</span>
+<span class="nc" id="L62">        LOG.info(&quot;New user registered: {}&quot;, userForm.getUsername());</span>
+
+<span class="nc" id="L64">        securityService.autologin(userForm.getUsername(), userForm.getPasswordConfirm());</span>
+<span class="nc" id="L65">        return &quot;redirect:/welcome&quot;;</span>
+    }
+
+    /** {@inheritDoc} */
+    @RequestMapping(value = &quot;/login&quot;, method = RequestMethod.GET)
+    public final String login(final Model model, final String error, final String logout) {
+<span class="pc bpc" id="L71" title="1 of 2 branches missed.">        if (error != null) {</span>
+<span class="nc" id="L72">            model.addAttribute(&quot;error&quot;, &quot;Your username or password is incorrect.&quot;);</span>
+        }
+<span class="pc bpc" id="L74" title="1 of 2 branches missed.">        if (logout != null) {</span>
+<span class="nc" id="L75">            model.addAttribute(&quot;message&quot;, &quot;You have been signed out.&quot;);</span>
+        }
+<span class="fc" id="L77">        return &quot;login&quot;;</span>
+    }
+
+    /** Dashboard for the signed-in user. */
+    @RequestMapping(value = { &quot;/&quot;, &quot;/welcome&quot; }, method = RequestMethod.GET)
+    public final String welcome(final Model model, final Principal principal) {
+<span class="fc" id="L83">        User user = null;</span>
+<span class="pc bpc" id="L84" title="3 of 4 branches missed.">        if (principal != null &amp;&amp; userService != null) {</span>
+<span class="nc" id="L85">            user = userService.findByUsername(principal.getName());</span>
+        }
+<span class="fc" id="L87">        model.addAttribute(&quot;user&quot;, user);</span>
+<span class="fc" id="L88">        model.addAttribute(&quot;completion&quot;, profileCompletion(user));</span>
+<span class="fc" id="L89">        model.addAttribute(&quot;podName&quot;, podName());</span>
+<span class="fc" id="L90">        model.addAttribute(&quot;javaVersion&quot;, System.getProperty(&quot;java.version&quot;));</span>
+<span class="fc" id="L91">        return &quot;welcome&quot;;</span>
+    }
+
+    /** {@inheritDoc} */
+    @RequestMapping(value = { &quot;/index&quot; }, method = RequestMethod.GET)
+    public final String indexHome(final Model model) {
+<span class="fc" id="L97">        return &quot;index_home&quot;;</span>
+    }
+
+    /** Admin: list all users (URL is restricted in appconfig-security.xml). */
+    @RequestMapping(value = &quot;/users&quot;, method = RequestMethod.GET)
+    public String getAllUsers(final Model model) {
+<span class="nc" id="L103">        List&lt;User&gt; users = userService.getList();</span>
+<span class="nc" id="L104">        model.addAttribute(&quot;users&quot;, users);</span>
+<span class="nc" id="L105">        return &quot;userList&quot;;</span>
+    }
+
+    /** Admin: one user's details, served from Memcached when available. */
+    @RequestMapping(value = &quot;/users/{id}&quot;, method = RequestMethod.GET)
+    public String getOneUser(@PathVariable(value = &quot;id&quot;) final String id, final Model model) {
+<span class="nc" id="L111">        User user = null;</span>
+<span class="nc" id="L112">        boolean fromCache = false;</span>
+        try {
+<span class="nc" id="L114">            long userId = Long.parseLong(id);</span>
+<span class="nc" id="L115">            User cached = MemcachedUtils.memcachedGetData(id);</span>
+<span class="nc bnc" id="L116" title="All 2 branches missed.">            if (cached != null) {</span>
+<span class="nc" id="L117">                user = cached;</span>
+<span class="nc" id="L118">                fromCache = true;</span>
+            } else {
+<span class="nc" id="L120">                user = userService.findById(userId);</span>
+<span class="nc bnc" id="L121" title="All 2 branches missed.">                if (user != null) {</span>
+<span class="nc" id="L122">                    MemcachedUtils.memcachedSetData(user, id);</span>
+                }
+            }
+<span class="nc" id="L125">        } catch (NumberFormatException e) {</span>
+<span class="nc" id="L126">            LOG.warn(&quot;Invalid user id requested: {}&quot;, id);</span>
+<span class="nc" id="L127">        }</span>
+<span class="nc" id="L128">        model.addAttribute(&quot;user&quot;, user);</span>
+<span class="nc" id="L129">        model.addAttribute(&quot;fromCache&quot;, fromCache);</span>
+<span class="nc" id="L130">        return &quot;user&quot;;</span>
+    }
+
+    /** Edit-profile form. Users may only edit themselves (admin may edit anyone). */
+    @RequestMapping(value = { &quot;/user/{username:.+}&quot; }, method = RequestMethod.GET)
+    public final String userUpdate(@PathVariable(value = &quot;username&quot;) final String username,
+                                   final Model model, final Principal principal) {
+<span class="nc bnc" id="L137" title="All 2 branches missed.">        if (!canEdit(principal, username)) {</span>
+<span class="nc" id="L138">            return &quot;redirect:/welcome&quot;;</span>
+        }
+<span class="nc" id="L140">        User user = userService.findByUsername(username);</span>
+<span class="nc bnc" id="L141" title="All 2 branches missed.">        if (user == null) {</span>
+<span class="nc" id="L142">            return &quot;redirect:/welcome&quot;;</span>
+        }
+<span class="nc" id="L144">        model.addAttribute(&quot;user&quot;, user);</span>
+<span class="nc" id="L145">        return &quot;userUpdate&quot;;</span>
+    }
+
+    /** Saves the profile. The username is never changed (it is the login identity). */
+    @RequestMapping(value = { &quot;/user/{username:.+}&quot; }, method = RequestMethod.POST)
+    public final String userUpdateProfile(@PathVariable(value = &quot;username&quot;) final String username,
+                                          final @ModelAttribute(&quot;user&quot;) User userForm,
+                                          final Model model, final Principal principal) {
+<span class="nc bnc" id="L153" title="All 2 branches missed.">        if (!canEdit(principal, username)) {</span>
+<span class="nc" id="L154">            return &quot;redirect:/welcome&quot;;</span>
+        }
+<span class="nc" id="L156">        User user = userService.findByUsername(username);</span>
+<span class="nc bnc" id="L157" title="All 2 branches missed.">        if (user == null) {</span>
+<span class="nc" id="L158">            return &quot;redirect:/welcome&quot;;</span>
+        }
+<span class="nc" id="L160">        user.setUserEmail(userForm.getUserEmail());</span>
+<span class="nc" id="L161">        user.setDateOfBirth(userForm.getDateOfBirth());</span>
+<span class="nc" id="L162">        user.setFatherName(userForm.getFatherName());</span>
+<span class="nc" id="L163">        user.setMotherName(userForm.getMotherName());</span>
+<span class="nc" id="L164">        user.setGender(userForm.getGender());</span>
+<span class="nc" id="L165">        user.setLanguage(userForm.getLanguage());</span>
+<span class="nc" id="L166">        user.setMaritalStatus(userForm.getMaritalStatus());</span>
+<span class="nc" id="L167">        user.setNationality(userForm.getNationality());</span>
+<span class="nc" id="L168">        user.setPermanentAddress(userForm.getPermanentAddress());</span>
+<span class="nc" id="L169">        user.setTempAddress(userForm.getTempAddress());</span>
+<span class="nc" id="L170">        user.setPhoneNumber(userForm.getPhoneNumber());</span>
+<span class="nc" id="L171">        user.setSecondaryPhoneNumber(userForm.getSecondaryPhoneNumber());</span>
+<span class="nc" id="L172">        user.setPrimaryOccupation(userForm.getPrimaryOccupation());</span>
+<span class="nc" id="L173">        user.setSecondaryOccupation(userForm.getSecondaryOccupation());</span>
+<span class="nc" id="L174">        user.setSkills(userForm.getSkills());</span>
+<span class="nc" id="L175">        user.setWorkingExperience(userForm.getWorkingExperience());</span>
+<span class="nc" id="L176">        userService.update(user);</span>
+<span class="nc" id="L177">        LOG.info(&quot;Profile updated: {}&quot;, username);</span>
+
+<span class="nc bnc" id="L179" title="All 2 branches missed.">        if (principal.getName().equals(username)) {</span>
+<span class="nc" id="L180">            return &quot;redirect:/welcome?updated&quot;;</span>
+        }
+<span class="nc" id="L182">        return &quot;redirect:/users/&quot; + user.getId();</span>
+    }
+
+    /** Admin: publishes 20 test messages to RabbitMQ. */
+    @RequestMapping(value = { &quot;/user/rabbit&quot; }, method = { RequestMethod.GET })
+    public String rabbitmqSetUp() {
+<span class="nc bnc" id="L188" title="All 2 branches missed.">        for (int i = 0; i &lt; 20; i++) {</span>
+<span class="nc" id="L189">            producerService.produceMessage(generateString());</span>
+        }
+<span class="nc" id="L191">        return &quot;rabbitmq&quot;;</span>
+    }
+
+    private static String generateString() {
+<span class="nc" id="L195">        return &quot;uuid = &quot; + UUID.randomUUID().toString();</span>
+    }
+
+    private static boolean canEdit(final Principal principal, final String username) {
+<span class="nc bnc" id="L199" title="All 4 branches missed.">        if (principal == null || username == null) {</span>
+<span class="nc" id="L200">            return false;</span>
+        }
+<span class="nc bnc" id="L202" title="All 4 branches missed.">        return principal.getName().equals(username) || ADMIN_USERNAME.equals(principal.getName());</span>
+    }
+
+    /** Pod name in Kubernetes, container ID in Docker, &quot;local&quot; otherwise. */
+    private static String podName() {
+<span class="fc" id="L207">        String host = System.getenv(&quot;HOSTNAME&quot;);</span>
+<span class="pc bpc" id="L208" title="3 of 4 branches missed.">        return (host == null || host.isEmpty()) ? &quot;local&quot; : host;</span>
+    }
+
+    /** Percentage of optional profile fields the user has filled in. */
+    static int profileCompletion(final User user) {
+<span class="pc bpc" id="L213" title="1 of 2 branches missed.">        if (user == null) {</span>
+<span class="fc" id="L214">            return 0;</span>
+        }
+<span class="nc" id="L216">        String[] fields = {</span>
+<span class="nc" id="L217">            user.getUserEmail(), user.getDateOfBirth(), user.getFatherName(), user.getMotherName(),</span>
+<span class="nc" id="L218">            user.getGender(), user.getMaritalStatus(), user.getPermanentAddress(), user.getTempAddress(),</span>
+<span class="nc" id="L219">            user.getPrimaryOccupation(), user.getSecondaryOccupation(), user.getSkills(),</span>
+<span class="nc" id="L220">            user.getPhoneNumber(), user.getSecondaryPhoneNumber(), user.getNationality(),</span>
+<span class="nc" id="L221">            user.getLanguage(), user.getWorkingExperience(), user.getProfileImg()</span>
+        };
+<span class="nc" id="L223">        int filled = 0;</span>
+<span class="nc bnc" id="L224" title="All 2 branches missed.">        for (String f : fields) {</span>
+<span class="nc bnc" id="L225" title="All 4 branches missed.">            if (f != null &amp;&amp; !f.trim().isEmpty()) {</span>
+<span class="nc" id="L226">                filled++;</span>
+            }
+        }
+<span class="nc" id="L229">        return Math.round(filled * 100f / fields.length);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FileUploadController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Devops Webapp</a> &gt; <a href="index.source.html" class="el_package">com.visualpathit.account.controller</a> &gt; <span class="el_source">FileUploadController.java</span></div><h1>FileUploadController.java</h1><pre class="source lang-java linenums">package com.visualpathit.account.controller;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.security.Principal;
+
+import javax.servlet.http.HttpServletResponse;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.visualpathit.account.model.User;
+import com.visualpathit.account.service.UserService;
+
+/**
+ * Profile photo upload and download.
+ * The owner is always the signed-in user; file names are generated server-side
+ * and the content is checked to really be an image.
+ */
+@Controller
+<span class="nc" id="L30">public class FileUploadController {</span>
+
+<span class="nc" id="L32">    private static final Logger LOG = LoggerFactory.getLogger(FileUploadController.class);</span>
+
+    @Autowired
+    private UserService userService;
+
+    @RequestMapping(value = { &quot;/upload&quot; }, method = RequestMethod.GET)
+    public final String upload(final Model model) {
+<span class="nc" id="L39">        return &quot;upload&quot;;</span>
+    }
+
+    @RequestMapping(value = &quot;/uploadFile&quot;, method = RequestMethod.POST)
+    public String uploadFileHandler(@RequestParam(&quot;file&quot;) final MultipartFile file,
+                                    final Principal principal, final Model model) {
+<span class="nc bnc" id="L45" title="All 2 branches missed.">        if (principal == null) {</span>
+<span class="nc" id="L46">            return &quot;redirect:/login&quot;;</span>
+        }
+<span class="nc bnc" id="L48" title="All 4 branches missed.">        if (file == null || file.isEmpty()) {</span>
+<span class="nc" id="L49">            model.addAttribute(&quot;error&quot;, &quot;Please choose an image to upload.&quot;);</span>
+<span class="nc" id="L50">            return &quot;upload&quot;;</span>
+        }
+<span class="nc" id="L52">        User user = userService.findByUsername(principal.getName());</span>
+<span class="nc bnc" id="L53" title="All 2 branches missed.">        if (user == null) {</span>
+<span class="nc" id="L54">            return &quot;redirect:/login&quot;;</span>
+        }
+        try {
+<span class="nc" id="L57">            byte[] bytes = file.getBytes();</span>
+<span class="nc" id="L58">            String ext = detectImageType(bytes);</span>
+<span class="nc bnc" id="L59" title="All 2 branches missed.">            if (ext == null) {</span>
+<span class="nc" id="L60">                model.addAttribute(&quot;error&quot;, &quot;Only PNG, JPG, GIF or WebP images are allowed.&quot;);</span>
+<span class="nc" id="L61">                return &quot;upload&quot;;</span>
+            }
+<span class="nc" id="L63">            File dir = uploadDir();</span>
+<span class="nc bnc" id="L64" title="All 4 branches missed.">            if (!dir.isDirectory() &amp;&amp; !dir.mkdirs()) {</span>
+<span class="nc" id="L65">                throw new IOException(&quot;Cannot create upload directory &quot; + dir);</span>
+            }
+<span class="nc" id="L67">            String fileName = &quot;user-&quot; + user.getId() + &quot;.&quot; + ext;</span>
+<span class="nc" id="L68">            File target = new File(dir, fileName);</span>
+<span class="nc" id="L69">            Files.write(target.toPath(), bytes);</span>
+
+            // remove a previous photo with a different extension
+<span class="nc" id="L72">            String old = user.getProfileImg();</span>
+<span class="nc bnc" id="L73" title="All 6 branches missed.">            if (old != null &amp;&amp; !old.equals(fileName) &amp;&amp; old.matches(&quot;user-\\d+\\.[a-z]+&quot;)) {</span>
+<span class="nc" id="L74">                Files.deleteIfExists(new File(dir, old).toPath());</span>
+            }
+
+<span class="nc" id="L77">            user.setProfileImg(fileName);</span>
+<span class="nc" id="L78">            user.setProfileImgPath(target.getAbsolutePath());</span>
+<span class="nc" id="L79">            userService.update(user);</span>
+<span class="nc" id="L80">            LOG.info(&quot;Profile photo updated for {} ({} bytes)&quot;, user.getUsername(), bytes.length);</span>
+<span class="nc" id="L81">            return &quot;redirect:/welcome?photo&quot;;</span>
+<span class="nc" id="L82">        } catch (IOException e) {</span>
+<span class="nc" id="L83">            LOG.error(&quot;Photo upload failed for {}&quot;, principal.getName(), e);</span>
+<span class="nc" id="L84">            model.addAttribute(&quot;error&quot;, &quot;Upload failed. Please try again.&quot;);</span>
+<span class="nc" id="L85">            return &quot;upload&quot;;</span>
+        }
+    }
+
+    /** Streams a user's profile photo (signed-in users only, see appconfig-security.xml). */
+    @RequestMapping(value = &quot;/profile/photo/{username:.+}&quot;, method = RequestMethod.GET)
+    public void photo(@PathVariable(&quot;username&quot;) final String username,
+                      final HttpServletResponse response) throws IOException {
+<span class="nc" id="L93">        User user = userService.findByUsername(username);</span>
+<span class="nc bnc" id="L94" title="All 2 branches missed.">        String name = (user == null) ? null : user.getProfileImg();</span>
+<span class="nc bnc" id="L95" title="All 4 branches missed.">        if (name == null || !name.matches(&quot;user-\\d+\\.(png|jpg|gif|webp)&quot;)) {</span>
+<span class="nc" id="L96">            response.sendError(HttpServletResponse.SC_NOT_FOUND);</span>
+<span class="nc" id="L97">            return;</span>
+        }
+<span class="nc" id="L99">        File f = new File(uploadDir(), name);</span>
+<span class="nc bnc" id="L100" title="All 2 branches missed.">        if (!f.isFile()) {</span>
+            // photo lives on another pod's local disk, or the pod restarted
+<span class="nc" id="L102">            response.sendError(HttpServletResponse.SC_NOT_FOUND);</span>
+<span class="nc" id="L103">            return;</span>
+        }
+<span class="nc" id="L105">        String ext = name.substring(name.lastIndexOf('.') + 1);</span>
+<span class="nc bnc" id="L106" title="All 2 branches missed.">        response.setContentType(&quot;jpg&quot;.equals(ext) ? &quot;image/jpeg&quot; : &quot;image/&quot; + ext);</span>
+<span class="nc" id="L107">        response.setHeader(&quot;Cache-Control&quot;, &quot;private, max-age=300&quot;);</span>
+<span class="nc" id="L108">        response.setContentLength((int) f.length());</span>
+<span class="nc" id="L109">        Files.copy(f.toPath(), response.getOutputStream());</span>
+<span class="nc" id="L110">    }</span>
+
+    /** UPLOAD_DIR env var (e.g. a mounted volume), else $CATALINA_HOME/tmpFiles. */
+    static File uploadDir() {
+<span class="nc" id="L114">        String dir = System.getenv(&quot;UPLOAD_DIR&quot;);</span>
+<span class="nc bnc" id="L115" title="All 4 branches missed.">        if (dir == null || dir.isEmpty()) {</span>
+<span class="nc" id="L116">            dir = System.getProperty(&quot;catalina.home&quot;, System.getProperty(&quot;java.io.tmpdir&quot;)) + File.separator + &quot;tmpFiles&quot;;</span>
+        }
+<span class="nc" id="L118">        return new File(dir);</span>
+    }
+
+    /** Returns the file extension for PNG/JPEG/GIF/WebP content, or null for anything else. */
+    static String detectImageType(final byte[] b) {
+<span class="nc bnc" id="L123" title="All 4 branches missed.">        if (b == null || b.length &lt; 12) {</span>
+<span class="nc" id="L124">            return null;</span>
+        }
+<span class="nc bnc" id="L126" title="All 8 branches missed.">        if ((b[0] &amp; 0xFF) == 0x89 &amp;&amp; b[1] == 'P' &amp;&amp; b[2] == 'N' &amp;&amp; b[3] == 'G') {</span>
+<span class="nc" id="L127">            return &quot;png&quot;;</span>
+        }
+<span class="nc bnc" id="L129" title="All 6 branches missed.">        if ((b[0] &amp; 0xFF) == 0xFF &amp;&amp; (b[1] &amp; 0xFF) == 0xD8 &amp;&amp; (b[2] &amp; 0xFF) == 0xFF) {</span>
+<span class="nc" id="L130">            return &quot;jpg&quot;;</span>
+        }
+<span class="nc bnc" id="L132" title="All 8 branches missed.">        if (b[0] == 'G' &amp;&amp; b[1] == 'I' &amp;&amp; b[2] == 'F' &amp;&amp; b[3] == '8') {</span>
+<span class="nc" id="L133">            return &quot;gif&quot;;</span>
+        }
+<span class="nc bnc" id="L135" title="All 16 branches missed.">        if (b[0] == 'R' &amp;&amp; b[1] == 'I' &amp;&amp; b[2] == 'F' &amp;&amp; b[3] == 'F'</span>
+                &amp;&amp; b[8] == 'W' &amp;&amp; b[9] == 'E' &amp;&amp; b[10] == 'B' &amp;&amp; b[11] == 'P') {
+<span class="nc" id="L137">            return &quot;webp&quot;;</span>
+        }
+<span class="nc" id="L139">        return null;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>
